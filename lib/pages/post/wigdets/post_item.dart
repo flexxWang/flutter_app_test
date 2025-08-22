@@ -11,8 +11,10 @@ class PostItem extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         // 点击跳转到帖子详情页
-        context
-            .goNamed('post_detail', pathParameters: {'id': post.id.toString()});
+        context.pushNamed(
+          'post_detail',
+          pathParameters: {'id': post.id.toString()},
+        );
       },
       child: Padding(
         padding: const EdgeInsets.all(8.0),
