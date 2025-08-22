@@ -28,6 +28,7 @@ dependencies:
   cached_network_image: ^3.3.1
   # 富文本解析
   flutter_html: ^3.0.0
+  flutter_launcher_icons: ^0.14.3
 
 dev_dependencies:
   flutter_test:
@@ -35,5 +36,13 @@ dev_dependencies:
 
   flutter_lints: ^2.0.0
 
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/

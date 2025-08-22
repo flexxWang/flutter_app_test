@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../pages/home/splash_page.dart';
 import '../pages/home/home_page.dart';
 import '../pages/post/post_page.dart';
 import '../pages/login/login_page.dart';
@@ -11,8 +12,13 @@ import '../pages/message/message_page.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/splash',
     routes: [
+      GoRoute(
+        path: '/splash',
+        name: 'splash',
+        builder: (context, state) => const SplashPage(),
+      ),
       GoRoute(
         path: '/login',
         name: 'login',
