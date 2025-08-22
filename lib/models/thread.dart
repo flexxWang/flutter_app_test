@@ -62,6 +62,14 @@ class ThreadItem {
     required this.attachments,
   });
 
+  // 安全头像 Getter
+  String get safeAvatar {
+    if (author.avatar.isNotEmpty) {
+      return author.avatar;
+    }
+    return 'https://i.cmoscool.com/mp-astroimg/avatar.png';
+  }
+
   factory ThreadItem.fromJson(Map<String, dynamic> json) {
     return ThreadItem(
       myStar: json['myStar'] ?? false,

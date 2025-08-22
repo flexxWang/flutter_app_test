@@ -22,6 +22,12 @@ dependencies:
   fluttertoast: ^8.2.4
   pull_to_refresh: ^2.0.0
   flutter_swiper_view: ^1.1.6
+  flutter_staggered_grid_view: ^0.7.0
+  photo_view: ^0.14.0
+  # 可选：做图片缓存更顺滑
+  cached_network_image: ^3.3.1
+  # 富文本解析
+  flutter_html: ^3.0.0
 
 dev_dependencies:
   flutter_test:

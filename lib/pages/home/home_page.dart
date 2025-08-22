@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_test/models/banner_item.dart';
-import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:flutter_application_test/core/services/api_service.dart';
-import 'package:flutter_application_test/models/post.dart';
-import './wigdets/post_item.dart';
+import 'package:flutter_application_test/models/banner_item.dart';
+import 'package:flutter_application_test/models/thread.dart';
+import 'package:flutter_application_test/widgets/image_preview_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,18 +13,24 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<Post> _posts = [];
   List<BannerItem> _banners = [];
-  final RefreshController _refreshController = RefreshController();
-  int _page = 1;
-  final int _pageSize = 10;
-  bool _hasMore = true;
+  List<ThreadItem> threads = [];
+  int page = 1;
+  bool hasMore = true;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     loadBanners();
-    _loadPosts(isRefresh: true);
+    _loadData();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - 100 &&
+          hasMore) {
+        _loadData();
+      }
+    });
   }
 
   Future<void> loadBanners() async {
@@ -39,30 +45,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _loadPosts({bool isRefresh = false}) async {
-    if (isRefresh) {
-      _page = 1;
-      _hasMore = true;
-    }
-
-    if (!_hasMore) return;
-
-    final result =
-        await ApiService.fetchPosts(page: _page, pageSize: _pageSize);
+  Future<void> _loadData() async {
+    final result = await ApiService.fetchThread(page: page, pageSize: 10);
+    print('加载作品数据: $result');
     setState(() {
-      if (isRefresh) {
-        _posts.clear();
-      }
-      _posts.addAll(result);
-      _hasMore = result.length == _pageSize;
-      if (_hasMore) _page++;
+      threads.addAll(result);
+      page++;
+      hasMore = result.length == 10;
     });
-
-    if (isRefresh) {
-      _refreshController.refreshCompleted();
-    } else {
-      _refreshController.loadComplete();
-    }
   }
 
   Widget _buildBanner() {
@@ -90,18 +80,157 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  List<String> get _galleryUrls => threads
+      .map((e) => e.attachments.isNotEmpty
+          ? e.attachments.first.thumbUrl
+          : (e.extra.moreImages.isNotEmpty
+              ? e.extra.moreImages.first.thumbUrl
+              : ''))
+      .toList();
+
+  String _firstImageUrl(ThreadItem thread) {
+    return thread.attachments.isNotEmpty
+        ? thread.attachments.first.thumbUrl
+        : (thread.extra.moreImages.isNotEmpty
+            ? thread.extra.moreImages.first.thumbUrl
+            : 'https://c.zwoastro.cn/common_attachments/image/2025/08/12/8113f2364a7e40258e8f281f11a07ca5.jpg');
+  }
+
+  Widget _buildPostGrid() {
+    return SliverPadding(
+      padding: const EdgeInsets.all(8),
+      sliver: SliverMasonryGrid.count(
+        crossAxisCount: 1,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childCount: threads.length,
+        itemBuilder: (context, index) {
+          final thread = threads[index];
+          final imageUrl = _firstImageUrl(thread);
+
+          return GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => ImagePreviewPage(
+                  images: _galleryUrls,
+                  initialIndex: index,
+                  ids: threads.map((t) => t.id).toList(),
+                  heroTagPrefix: 'thread-hero-',
+                ),
+              ));
+            },
+            child: Hero(
+              // 使用 ValueKey 保证唯一性，避免 GlobalKey 冲突
+              key: ValueKey('thread-hero-${thread.id}'),
+              tag: 'thread-hero-${thread.id}',
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.grey[200],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 图片
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: AspectRatio(
+                        aspectRatio: 3 / 4,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Container(color: Colors.grey[300]),
+                            Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, progress) {
+                                if (progress == null) return child;
+                                return const SizedBox.shrink();
+                              },
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(Icons.broken_image),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // 标题
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        thread.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // 用户信息
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 10,
+                            backgroundImage: NetworkImage(thread.safeAvatar),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              thread.author.nickname.isNotEmpty
+                                  ? thread.author.nickname
+                                  : '匿名用户',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SmartRefresher(
-      controller: _refreshController,
-      enablePullUp: _hasMore,
-      onRefresh: () => _loadPosts(isRefresh: true),
-      onLoading: _loadPosts,
-      child: ListView(
-        children: [
-          _buildBanner(),
-          const SizedBox(height: 12),
-          ..._posts.map((post) => PostItem(post: post)).toList(),
+    return Scaffold(
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          // banner
+          SliverToBoxAdapter(child: _buildBanner()),
+          const SliverPadding(padding: EdgeInsets.only(top: 8)),
+          // 帖子列表
+          _buildPostGrid(),
+          // 底部 loading
+          if (hasMore || page == 1)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

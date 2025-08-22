@@ -16,6 +16,12 @@ class ApiService {
     return list.map((e) => Post.fromJson(e)).toList();
   }
 
+  static Future<Post> fetchPostsDetail(int threadId) async {
+    final res = await DioClient().get('/v1/threads/$threadId');
+    final data = res.data['data'];
+    return Post.fromJson(data);
+  }
+
   static Future<List<BannerItem>> fetchBanners({int position = 1}) async {
     final res = await DioClient.bannerApi().get(
         '/opercenter/v1/advert-app/on-list',

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import './widgets/stat_item.dart';
+import 'package:flutter_application_test/widgets/image_preview_page.dart';
+// 可选缓存
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_application_test/models/thread.dart';
 import 'package:flutter_application_test/core/services/api_service.dart';
 
@@ -12,23 +16,60 @@ class MinePage extends StatefulWidget {
 
 class _MinePageState extends State<MinePage> {
   List<ThreadItem> threads = [];
-  bool isLoading = true;
+  bool isLoading = false;
+  bool hasMore = true;
+  int page = 1;
+  final int pageSize = 10;
+  List<String> get _galleryUrls => threads.map(_firstImageUrl).toList();
+
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    // 滚动监听，接近底部时加载更多
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - 200 &&
+          !isLoading &&
+          hasMore) {
+        _loadData();
+      }
+    });
   }
 
   Future<void> _loadData() async {
+    if (isLoading) return;
+
+    setState(() => isLoading = true);
+
     try {
-      final result = await ApiService.fetchThread(page: 1, pageSize: 10);
+      final result =
+          await ApiService.fetchThread(page: page, pageSize: pageSize);
+      print('加载数据成功: ${result.length}条');
       setState(() {
-        threads = result;
+        if (result.length < pageSize) {
+          hasMore = false;
+        }
+        threads.addAll(result);
+        page++;
       });
     } catch (e) {
       print('加载数据失败: $e');
+    } finally {
+      setState(() => isLoading = false);
     }
+  }
+
+  String _firstImageUrl(ThreadItem thread) {
+    if (thread.attachments.isNotEmpty) {
+      return thread.attachments.first.thumbUrl;
+    }
+    if (thread.extra.moreImages.isNotEmpty) {
+      return thread.extra.moreImages.first.thumbUrl;
+    }
+    return 'https://c.zwoastro.cn/common_attachments/image/2025/08/12/8113f2364a7e40258e8f281f11a07ca5.jpg';
   }
 
   @override
@@ -186,7 +227,7 @@ class _MinePageState extends State<MinePage> {
                 },
                 body: TabBarView(
                   children: [
-                    _buildPostGrid(threads),
+                    _buildPostGrid(),
                     Center(child: Text('文章内容')),
                     Center(child: Text('想法内容')),
                     Center(child: Text('提问内容')),
@@ -196,38 +237,131 @@ class _MinePageState extends State<MinePage> {
             )));
   }
 
-  Widget _buildPostGrid(List<ThreadItem> threads) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 0.75,
-      ),
-      itemCount: threads.length,
-      itemBuilder: (context, index) {
-        final thread = threads[index];
-        final imageUrl = thread.attachments.isNotEmpty
-            ? thread.attachments.first.thumbUrl
-            : (thread.extra.moreImages.isNotEmpty
-                ? thread.extra.moreImages.first.thumbUrl
-                : 'https://c.zwoastro.cn/common_attachments/image/2025/08/12/8113f2364a7e40258e8f281f11a07ca5.jpg');
+  Widget _buildPostGrid() {
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(8),
+          sliver: SliverMasonryGrid.count(
+            crossAxisCount: 2,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childCount: threads.length,
+            itemBuilder: (context, index) {
+              final thread = threads[index];
+              final imageUrl = _firstImageUrl(thread);
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Stack(
-            children: [
-              Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            ],
+              return GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ImagePreviewPage(
+                        images: _galleryUrls,
+                        initialIndex: index,
+                        ids: threads.map((t) => t.id).toList(),
+                        heroTagPrefix: 'thread-hero-',
+                      ),
+                    ),
+                  );
+                },
+                child: Hero(
+                  tag: 'thread-hero-${thread.id}',
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.grey[200], // 默认灰色背景
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 图片容器
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: AspectRatio(
+                            aspectRatio: 3 / 4, // 固定比例，高度随宽度变化
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Container(color: Colors.grey[300]), // 灰色占位
+                                Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return const SizedBox.shrink(); // 已经有灰色占位
+                                  },
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(Icons.broken_image),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            thread.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 8),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 10,
+                                backgroundImage:
+                                    NetworkImage(thread.safeAvatar),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  thread.author.nickname.isNotEmpty
+                                      ? thread.author.nickname
+                                      : '匿名用户',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
-        );
-      },
+        ),
+
+        // 底部 Loading（中心居中）
+        if (hasMore || page == 1)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.redAccent,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -255,5 +389,11 @@ class _MinePageState extends State<MinePage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 }
